@@ -52,9 +52,9 @@ class GCSAttachmentStorage:
 
     def __init__(self) -> None:
         self.bucket_name = os.environ["WORKSPACE_MCP_FILES_GCS_BUCKET"]
-        self.prefix = os.getenv(
-            "WORKSPACE_MCP_FILES_GCS_PREFIX", "attachments"
-        ).strip("/")
+        self.prefix = os.getenv("WORKSPACE_MCP_FILES_GCS_PREFIX", "attachments").strip(
+            "/"
+        )
         self.url_expiration_seconds = int(
             os.getenv(
                 "WORKSPACE_MCP_FILES_SIGNED_URL_SECONDS",
@@ -219,9 +219,7 @@ class GCSAttachmentStorage:
 
             credentials, _ = google.auth.default()
             credentials.refresh(Request())
-            service_account_email = getattr(
-                credentials, "service_account_email", None
-            )
+            service_account_email = getattr(credentials, "service_account_email", None)
             if not service_account_email or service_account_email == "default":
                 # Resolve the actual SA email from the metadata server if needed.
                 import requests as _requests
