@@ -558,9 +558,7 @@ async def get_drive_file_download_url(
 
     # Stateless mode has no attachment storage to hand out a URL from, so the
     # file itself goes back as an embedded resource, up to inline_max_bytes.
-    # With GCS file staging configured (WORKSPACE_MCP_FILES_GCS_BUCKET) the bytes
-    # live in GCS and the client fetches them via a signed URL, so the stateless
-    # inline path is not needed: fall through to attachment storage instead.
+    # GCS staging supplies that storage, so the file goes there instead.
     inline_max_bytes = (
         get_stateless_inline_max_bytes()
         if is_stateless_mode() and not gcs_files_enabled()
@@ -656,7 +654,7 @@ async def get_drive_file_download_url(
                 "\nThe file has been saved to disk and can be accessed directly via the file path."
             )
         else:
-            download_url = get_attachment_url(result.file_id)
+            download_url = await asyncio.to_thread(get_attachment_url, result.file_id)
             result_lines.append(f"\n📎 Download URL: {download_url}")
             result_lines.append("\nThe file will expire after 1 hour.")
 

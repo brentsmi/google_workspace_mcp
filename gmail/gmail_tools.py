@@ -40,6 +40,7 @@ from core.file_limits import (
     ensure_within_file_size_limit,
     get_max_file_bytes,
 )
+from core.gcs_attachment_storage import gcs_files_enabled
 from core.config import (
     get_transport_mode,
     WORKSPACE_EXTERNAL_URL,
@@ -542,7 +543,8 @@ async def _export_full_message(
             "from the file path (its content is NOT included above)."
         )
     else:
-        result_lines.append(f"\n📎 Download URL: {get_attachment_url(saved.file_id)}")
+        download_url = await asyncio.to_thread(get_attachment_url, saved.file_id)
+        result_lines.append(f"\n📎 Download URL: {download_url}")
         result_lines.append(
             "\nFetch the full message from the URL above (content is NOT included "
             "in this response). The file will expire after 1 hour."
@@ -2395,10 +2397,8 @@ async def get_gmail_attachment_content(
         base64_data = ""
         return str(e)
 
-    # Check if we're in stateless mode (can't save files).
-    # With GCS file staging configured, files can be staged even in stateless mode.
+    # Stateless mode has no file storage unless GCS staging is configured.
     from auth.oauth_config import is_stateless_mode
-    from core.gcs_attachment_storage import gcs_files_enabled
 
     if is_stateless_mode() and not gcs_files_enabled():
         result_lines = [
@@ -2469,9 +2469,12 @@ async def get_gmail_attachment_content(
                     f"Could not fetch attachment metadata for {attachment_id}, using defaults"
                 )
 
-        # Save attachment to local disk
-        result = storage.save_attachment(
-            base64_data=base64_data, filename=filename, mime_type=mime_type
+        # The GCS backend uploads over the network, so keep it off the event loop.
+        result = await asyncio.to_thread(
+            storage.save_attachment,
+            base64_data=base64_data,
+            filename=filename,
+            mime_type=mime_type,
         )
         saved_filename = Path(result.path).name
 
@@ -2489,7 +2492,7 @@ async def get_gmail_attachment_content(
                 "\nThe file has been saved to disk and can be accessed directly via the file path."
             )
         else:
-            download_url = get_attachment_url(result.file_id)
+            download_url = await asyncio.to_thread(get_attachment_url, result.file_id)
             result_lines.append(f"\n📎 Download URL: {download_url}")
             result_lines.append("\nThe file will expire after 1 hour.")
 
