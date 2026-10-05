@@ -1878,12 +1878,12 @@ async def get_gmail_message_content(
         bool,
         Field(
             description=(
-                "When True, return the COMPLETE untruncated message: saved to local "
+                "When True, return the COMPLETE untruncated message: saved to "
                 "storage and referenced by download URL/file path instead of the body "
-                "text, or inlined in the response when the server has no file storage "
-                "(stateless mode). Use for messages large enough to hit the truncation "
-                "limit, or when byte-exact fidelity is needed (pair with "
-                "body_format='raw' for a .eml export)."
+                "text. In stateless mode without GCS staging, the body is returned "
+                "inline; with GCS staging, a signed download URL is returned. Use for "
+                "messages large enough to hit the truncation limit, or when byte-exact "
+                "fidelity is needed (pair with body_format='raw' for a .eml export)."
             ),
         ),
     ] = False,
@@ -1893,11 +1893,12 @@ async def get_gmail_message_content(
     Retrieves the full content (subject, sender, recipients, body) of a specific Gmail message.
 
     Bodies are returned inline and truncated at 20,000 characters. Set full=True to
-    get the complete, untruncated message instead: it is exported to disk and the
+    get the complete, untruncated message instead: it is exported to storage and the
     response carries a short-lived download URL (HTTP transport) or file path (stdio
     transport) rather than the body, so large messages never stream through the model
-    context. Stateless deployments have no file storage, so there full=True returns the
-    untruncated body inline.
+    context. Stateless deployments without GCS staging have no storage, so there
+    full=True returns the untruncated body inline; with GCS staging configured it
+    returns a signed download URL like any other HTTP deployment.
 
     Args:
         message_id (str): The unique ID of the Gmail message to retrieve.

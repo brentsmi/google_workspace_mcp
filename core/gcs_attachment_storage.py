@@ -187,8 +187,20 @@ class GCSAttachmentStorage:
         return self._metadata.get(file_id)
 
     def get_signed_url(self, file_id: str) -> str:
-        """Generate a V4 signed download URL for a previously saved attachment."""
-        meta = self._metadata.get(file_id)
+        """Generate a V4 signed download URL for a previously saved attachment.
+
+        An entry whose own lifetime has run out is dropped and treated as unknown.
+        Metadata is only swept on save, so without this a caller holding a file_id
+        could keep minting fresh one-hour URLs for an object long after its first
+        URL lapsed — for as long as the bucket's lifecycle rule still keeps it.
+        The built-in tools sign immediately and never hand out the id, so this
+        guards callers of the storage API rather than the normal response path.
+        """
+        with self._metadata_lock:
+            meta = self._metadata.get(file_id)
+            if meta and meta["expires_at"] <= datetime.now():
+                del self._metadata[file_id]
+                meta = None
         if not meta:
             raise KeyError(f"Unknown attachment file_id: {file_id}")
 

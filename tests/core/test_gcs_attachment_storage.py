@@ -206,6 +206,23 @@ class TestLookups:
     def test_metadata_for_unknown_id(self, storage):
         assert storage.get_attachment_metadata("does-not-exist") is None
 
+    def test_signed_url_rejects_lapsed_metadata(self, storage):
+        """A lapsed entry must not mint a fresh URL.
+
+        Metadata is otherwise only swept on save, so a caller holding a file_id
+        could keep extending access for as long as the bucket still holds the
+        object.
+        """
+        saved = storage.save_attachment_bytes(b"x", filename="a.txt")
+        with storage._metadata_lock:
+            storage._metadata[saved.file_id]["expires_at"] = datetime.now() - timedelta(
+                seconds=1
+            )
+
+        with pytest.raises(KeyError):
+            storage.get_signed_url(saved.file_id)
+        assert saved.file_id not in storage._metadata
+
     def test_signed_url_for_unknown_id_raises(self, storage):
         with pytest.raises(KeyError):
             storage.get_signed_url("does-not-exist")
