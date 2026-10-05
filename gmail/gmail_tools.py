@@ -375,9 +375,11 @@ async def _export_full_message(
     declared_size: Optional[int] = None,
 ) -> str:
     """
-    Return a message's complete, untruncated content: saved to local storage and
+    Return a message's complete, untruncated content: saved to storage and
     referenced by download URL (HTTP transport) or file path (stdio transport), or —
-    in stateless mode, where there is no storage — inlined in the response.
+    in stateless mode without GCS staging, where there is no storage — inlined in
+    the response. With a GCS bucket configured, stateless mode also gets a signed
+    download URL, since the bucket is not instance-local.
 
     Whenever a file is written the body is kept out of the returned string, which is
     the point of the export: large messages are handed off out-of-band instead of
@@ -486,7 +488,15 @@ async def _export_full_message(
     # Stateless deployments have no persistent storage to hand a file reference off
     # from, but the guarantee callers actually want is "complete and untruncated".
     # Inline delivery satisfies that; it only costs model context.
-    stateless = is_stateless_mode()
+    #
+    # GCS staging is the exception: the bucket is not instance-local, so a
+    # stateless deployment that configures one can hand back a signed URL after
+    # all and keep the body out of the model context. Only fall back to inlining
+    # when stateless mode has no staging available.
+    # core.gcs_attachment_storage imports core.attachment_storage, so import late.
+    from core.gcs_attachment_storage import gcs_files_enabled
+
+    stateless = is_stateless_mode() and not gcs_files_enabled()
 
     size_bytes = len(content_bytes)
     size_kb = size_bytes / 1024

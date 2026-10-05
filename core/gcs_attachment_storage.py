@@ -83,6 +83,12 @@ class GCSAttachmentStorage:
         safe_filename = sanitize_attachment_filename(filename) if filename else file_id
         blob_name = f"{self.prefix}{file_id}/{safe_filename}"
         blob = self._get_client().bucket(self.bucket_name).blob(blob_name)
+        # Objects carry user data and are reachable by anyone holding the signed
+        # URL, so keep caches out of the path: GCS otherwise defaults unset
+        # Cache-Control to "public, max-age=3600", which lets a browser or an
+        # intermediary keep the bytes after the URL has expired. Set here rather
+        # than at each call site so every upload path inherits it.
+        blob.cache_control = "no-store"
         return file_id, safe_filename, blob
 
     def _record(

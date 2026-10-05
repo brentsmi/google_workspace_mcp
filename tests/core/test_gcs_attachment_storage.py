@@ -18,7 +18,7 @@ from auth.oauth_config import get_transport_mode, set_transport_mode
 from core.gcs_attachment_storage import GCSAttachmentStorage, gcs_files_enabled
 from gchat.chat_tools import download_chat_attachment
 from gdrive.drive_tools import get_drive_file_download_url
-from gmail.gmail_tools import get_gmail_attachment_content
+from gmail.gmail_tools import get_gmail_attachment_content, get_gmail_message_content
 
 BUCKET = "test-bucket"
 
@@ -173,6 +173,22 @@ class TestSaveAttachment:
         saved = store.save_attachment_bytes(b"x", "a.pdf", None)
         assert saved.path == f"gs://{BUCKET}/{saved.file_id}/a.pdf"
 
+    def test_uploads_are_marked_no_store(self, storage, tmp_path):
+        """Caches must not keep attachment bytes past the signed URL's lifetime.
+
+        GCS defaults an unset Cache-Control to "public, max-age=3600", so a
+        browser or intermediary could serve the file after the URL expired.
+        """
+        storage.save_attachment_bytes(b"secret", filename="a.txt")
+
+        src = tmp_path / "b.txt"
+        src.write_bytes(b"also secret")
+        storage.save_attachment_from_path(str(src), filename="b.txt")
+
+        blobs = storage._get_client().bucket(BUCKET).blobs.values()
+        assert len(blobs) == 2
+        assert {blob.cache_control for blob in blobs} == {"no-store"}
+
     def test_lapsed_metadata_is_evicted_on_save(self, storage):
         old = storage.save_attachment_bytes(b"x", "old.bin", None)
         storage._metadata[old.file_id]["expires_at"] = datetime.now() - timedelta(
@@ -298,4 +314,39 @@ class TestStatelessToolsStageToGcs:
 
         assert "Download URL: https://signed.example/attachments/" in result
         assert "Stateless mode" not in result
+
+    @pytest.mark.asyncio
+    async def test_gmail_full_message_export(self, gcs_backend):
+        """Stateless + GCS stages the export instead of inlining it.
+
+        Without a bucket, a stateless deployment has nowhere to put the file and
+        inlines the whole message, which is what the export exists to avoid. The
+        bucket is not instance-local, so staging works even there.
+        """
+        service = Mock()
+        service.users().messages().get().execute.return_value = {
+            "id": "m1",
+            "sizeEstimate": 42,
+            "payload": {
+                "headers": [
+                    {"name": "Subject", "value": "Quarterly report"},
+                    {"name": "From", "value": "a@example.com"},
+                ],
+                "mimeType": "text/plain",
+                "body": {"data": base64.urlsafe_b64encode(b"full body").decode()},
+            },
+        }
+        with patch("gmail.gmail_tools.is_stateless_mode", return_value=True):
+            result = await _unwrap(get_gmail_message_content)(
+                service=service,
+                message_id="m1",
+                user_google_email="u@example.com",
+                full=True,
+            )
+
+        assert "Download URL: https://signed.example/attachments/" in result
+        assert "Stateless mode" not in result
+        assert "BODY (COMPLETE, NOT TRUNCATED)" not in result
+        _assert_staged_off_event_loop(gcs_backend)
+
         _assert_staged_off_event_loop(gcs_backend)
