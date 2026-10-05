@@ -206,12 +206,14 @@ def _format_attendee_details(
     attendees: List[Dict[str, Any]], indent: str = "  "
 ) -> str:
     """
-      Format attendee details including response status, organizer, and optional flags.
+      Format attendee details including response status, organizer and optional
+      flags, and the attendee's RSVP note (the API's "comment" field).
 
       Example output format:
       "  user@example.com: accepted
     manager@example.com: declined (organizer)
-    optional-person@example.com: tentative (optional)"
+    optional-person@example.com: tentative (optional)
+    guest@example.com: declined (note: "Can't make it")"
 
       Args:
           attendees: List of attendee dictionaries from Google Calendar API
@@ -235,6 +237,10 @@ def _format_attendee_details(
             detail_parts.append("(organizer)")
         if optional:
             detail_parts.append("(optional)")
+        comment = a.get("comment")
+        if comment:
+            # Collapse whitespace so a multi-line note stays on the attendee's line.
+            detail_parts.append('(note: "' + " ".join(comment.split()) + '")')
 
         attendee_details_list.append(" ".join(detail_parts))
 
