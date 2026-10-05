@@ -184,7 +184,18 @@ class GCSAttachmentStorage:
         return None
 
     def get_attachment_metadata(self, file_id: str) -> Optional[Dict]:
-        return self._metadata.get(file_id)
+        """Metadata for an attachment, or None once its URL lifetime has run out.
+
+        Returns a copy: the caller must not be able to mutate the shared dict,
+        and the entry can be evicted between calls. Mirrors the local
+        ``AttachmentStorage``, which copies and expires the same way.
+        """
+        with self._metadata_lock:
+            meta = self._metadata.get(file_id)
+            if meta and meta["expires_at"] <= datetime.now():
+                del self._metadata[file_id]
+                return None
+            return dict(meta) if meta else None
 
     def get_signed_url(self, file_id: str) -> str:
         """Generate a V4 signed download URL for a previously saved attachment.

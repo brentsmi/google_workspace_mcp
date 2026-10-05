@@ -223,6 +223,24 @@ class TestLookups:
             storage.get_signed_url(saved.file_id)
         assert saved.file_id not in storage._metadata
 
+    def test_metadata_is_a_copy(self, storage):
+        """The caller must not be able to mutate the shared dict."""
+        saved = storage.save_attachment_bytes(b"x", filename="a.txt")
+        meta = storage.get_attachment_metadata(saved.file_id)
+        meta["filename"] = "tampered"
+        assert storage.get_attachment_metadata(saved.file_id)["filename"] != "tampered"
+
+    def test_metadata_drops_lapsed_entries(self, storage):
+        """A lapsed entry reads as unknown, like the local backend."""
+        saved = storage.save_attachment_bytes(b"x", filename="a.txt")
+        with storage._metadata_lock:
+            storage._metadata[saved.file_id]["expires_at"] = datetime.now() - timedelta(
+                seconds=1
+            )
+
+        assert storage.get_attachment_metadata(saved.file_id) is None
+        assert saved.file_id not in storage._metadata
+
     def test_signed_url_for_unknown_id_raises(self, storage):
         with pytest.raises(KeyError):
             storage.get_signed_url("does-not-exist")
@@ -331,6 +349,7 @@ class TestStatelessToolsStageToGcs:
 
         assert "Download URL: https://signed.example/attachments/" in result
         assert "Stateless mode" not in result
+        assert _assert_staged_off_event_loop(gcs_backend).content == b"hello"
 
     @pytest.mark.asyncio
     async def test_gmail_full_message_export(self, gcs_backend):
