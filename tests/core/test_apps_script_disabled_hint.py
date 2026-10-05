@@ -67,6 +67,19 @@ async def test_other_apps_script_403_keeps_reauth_hint():
 
 
 @pytest.mark.asyncio
+async def test_other_apps_script_503_keeps_google_error():
+    content = b"<html><p>The service is currently unavailable.</p></html>"
+    tool = _raising_tool(503, content, SCRIPT_URI)
+
+    with pytest.raises(Exception) as excinfo:
+        await tool(user_google_email="user@example.com")
+
+    message = str(excinfo.value)
+    assert APPS_SCRIPT_USER_SETTINGS_URL not in message
+    assert "currently unavailable" in message
+
+
+@pytest.mark.asyncio
 async def test_503_from_other_services_is_not_attributed_to_apps_script():
     tool = _raising_tool(
         503, b"backend error", "https://gmail.googleapis.com/gmail/v1/users/me/messages"

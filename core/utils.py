@@ -1112,14 +1112,15 @@ def _is_apps_script_api_disabled_for_user(error: HttpError, error_details: str) 
     documented answer is a 403 "User has not enabled the Apps Script API", but
     in practice it also answers 503 "Service error -27" with an HTML error
     page, which reads like an outage. Either way the fix is the user's own
-    setting, so both are treated alike.
+    setting, so both are treated alike. Other 503s, such as a real outage,
+    are left to the generic handling so Google's own error stays visible.
     """
     host = urllib.parse.urlparse(getattr(error, "uri", None) or "").hostname
     if host != "script.googleapis.com":
         return False
     status = getattr(error.resp, "status", None)
     if status == 503:
-        return True
+        return "Service error -27" in error_details
     return status == 403 and "has not enabled the Apps Script API" in error_details
 
 
@@ -1204,8 +1205,7 @@ def handle_http_errors(
                             f"Script API is turned off in that user's Apps Script "
                             f"settings. LLM: Ask the user to open "
                             f"{APPS_SCRIPT_USER_SETTINGS_URL}, turn on 'Google Apps "
-                            f"Script API', wait a minute, and retry. If it is "
-                            f"already on, this is likely a temporary Google outage."
+                            f"Script API', wait a minute, and retry."
                         )
                     elif error.resp.status in [401, 403]:
                         # Authentication/authorization errors
