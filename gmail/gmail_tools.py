@@ -493,9 +493,6 @@ async def _export_full_message(
     # stateless deployment that configures one can hand back a signed URL after
     # all and keep the body out of the model context. Only fall back to inlining
     # when stateless mode has no staging available.
-    # core.gcs_attachment_storage imports core.attachment_storage, so import late.
-    from core.gcs_attachment_storage import gcs_files_enabled
-
     stateless = is_stateless_mode() and not gcs_files_enabled()
 
     size_bytes = len(content_bytes)
@@ -1908,21 +1905,22 @@ async def get_gmail_message_content(
             "text" (default) returns plaintext (HTML converted to text as fallback).
             "html" returns the raw HTML body as-is without conversion.
             "raw" fetches the full raw MIME message and returns the base64url-decoded content.
-        full (bool): When True, write the untruncated message to local storage and
+        full (bool): When True, write the untruncated message to storage and
             return its URL/path instead of the body. body_format selects the exported
             file type: "raw" saves the byte-exact RFC 5322 message as .eml, "html"
             saves the raw HTML body, "text" saves the plaintext body. The "html"/"text"
             exports decode as UTF-8 and drop undecodable bytes, so prefer "raw" when
-            byte-exact fidelity matters. In stateless mode there is no storage to write
-            to, so the untruncated content is returned inline instead.
+            byte-exact fidelity matters. In stateless mode without GCS staging there is
+            no storage to write to, so the untruncated content is returned inline
+            instead; with GCS staging it is saved and returned as a signed URL.
         format (Literal["full", "metadata"]): Message format. "full" (default) includes
             the body and attachments, "metadata" only headers.
 
     Returns:
         str: The message details including subject, sender, date, Message-ID, recipients
             (To, Cc), and body content — or, when full=True, the saved file's download
-            URL or path in place of the body (the untruncated body itself in stateless
-            mode).
+            URL or path in place of the body (inline only in stateless mode without
+            GCS staging).
     """
     logger.info(
         f"[get_gmail_message_content] Invoked. Message ID: '{message_id}', "

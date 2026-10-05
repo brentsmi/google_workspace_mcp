@@ -54,8 +54,15 @@ def gcs_files_enabled() -> bool:
 class GCSAttachmentStorage:
     """Stores attachments as GCS objects and serves them via signed URLs.
 
-    Mirrors the public interface of ``AttachmentStorage`` and adds
-    ``get_signed_url``.
+    Covers the parts of ``AttachmentStorage`` the tools call, and adds
+    ``get_signed_url``. Two methods are deliberately absent: ``sweep_expired``
+    and ``cleanup_expired`` delete files from local disk, while GCS objects are
+    removed by the bucket's lifecycle rule. ``get_attachment_storage`` only
+    sweeps the local backend, so nothing asks this one for them.
+
+    ``get_attachment_path`` returns ``None`` here: there is no local file. The
+    ``/attachments/{id}`` route answers 404 for that, which is correct — with
+    GCS the client follows the signed URL instead.
     """
 
     def __init__(self) -> None:
