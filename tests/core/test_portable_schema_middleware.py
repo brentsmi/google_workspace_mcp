@@ -4,6 +4,7 @@ import json
 from typing import Literal, Optional
 
 import pytest
+from pydantic import TypeAdapter, ValidationError
 from fastmcp import Client, FastMCP
 
 # Importing the tool modules registers their tools on the shared server.
@@ -151,3 +152,23 @@ async def test_registered_catalog_has_no_unportable_keywords():
     }
 
     assert {name: path for name, path in offenders.items() if path} == {}
+
+
+@pytest.mark.asyncio
+async def test_registered_null_default_args_accept_explicit_null():
+    # The listed schema drops the null branch, so `"default": null` is the only
+    # hint an optional arg is nullable; a client that sends that default back
+    # must not fail validation. start_google_auth's default comes from
+    # USER_GOOGLE_EMAIL, so it is only None when that env var is unset.
+    rejected = []
+    for tool in await server.list_tools():
+        if tool.name == "start_google_auth":
+            continue
+        for name, prop in tool.parameters.get("properties", {}).items():
+            if "default" not in prop or prop["default"] is not None:
+                continue
+            try:
+                TypeAdapter(tool.fn.__annotations__[name]).validate_python(None)
+            except ValidationError:
+                rejected.append(f"{tool.name}.{name}")
+    assert rejected == []
