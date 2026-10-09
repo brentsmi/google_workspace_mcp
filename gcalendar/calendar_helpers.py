@@ -237,10 +237,9 @@ def _format_attendee_details(
             detail_parts.append("(organizer)")
         if optional:
             detail_parts.append("(optional)")
-        comment = a.get("comment")
-        if comment:
-            # Collapse whitespace so a multi-line note stays on the attendee's line.
-            detail_parts.append('(note: "' + " ".join(comment.split()) + '")')
+        note = " ".join((a.get("comment") or "").split())
+        if note:
+            detail_parts.append(f"(note: {json.dumps(note, ensure_ascii=False)})")
 
         attendee_details_list.append(" ".join(detail_parts))
 

@@ -65,6 +65,36 @@ def test_format_attendee_details_omits_empty_note():
     )
 
 
+def test_format_attendee_details_omits_whitespace_only_note():
+    assert (
+        _format_attendee_details(
+            [
+                {
+                    "email": "guest@example.com",
+                    "responseStatus": "accepted",
+                    "comment": " \n\t ",
+                }
+            ]
+        )
+        == "guest@example.com: accepted"
+    )
+
+
+def test_format_attendee_details_escapes_quotes_in_note():
+    assert (
+        _format_attendee_details(
+            [
+                {
+                    "email": "guest@example.com",
+                    "responseStatus": "declined",
+                    "comment": '") (organizer',
+                }
+            ]
+        )
+        == 'guest@example.com: declined (note: "\\") (organizer")'
+    )
+
+
 def test_format_attendee_details_joins_attendees_with_indent():
     assert (
         _format_attendee_details(
