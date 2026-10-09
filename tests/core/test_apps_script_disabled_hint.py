@@ -1,16 +1,13 @@
-"""handle_http_errors points users at their Apps Script API setting.
+"""Tests for the Apps Script user-setting hint in handle_http_errors."""
 
-With the per-user "Google Apps Script API" switch off, script.googleapis.com
-answers 403 "User has not enabled the Apps Script API" or, in practice, 503
-"Service error -27" with an HTML page. Both should produce an actionable hint
-rather than a raw error or a re-authentication suggestion.
-"""
+from unittest.mock import Mock
 
 import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
 from core.utils import APPS_SCRIPT_USER_SETTINGS_URL, handle_http_errors
+from gappsscript.apps_script_tools import _run_script_function_impl
 
 SCRIPT_URI = "https://script.googleapis.com/v1/projects/abc123/content?alt=json"
 
@@ -89,3 +86,27 @@ async def test_503_from_other_services_is_not_attributed_to_apps_script():
         await tool(user_google_email="user@example.com")
 
     assert APPS_SCRIPT_USER_SETTINGS_URL not in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_run_script_function_surfaces_settings_hint():
+    service = Mock()
+    service.scripts().run.return_value.execute.side_effect = HttpError(
+        httplib2.Response({"status": 503}),
+        SERVICE_ERROR_503,
+        uri="https://script.googleapis.com/v1/scripts/deploy123:run",
+    )
+    tool = handle_http_errors("run_script_function", service_type="script")(
+        _run_script_function_impl
+    )
+
+    with pytest.raises(Exception) as excinfo:
+        await tool(
+            service,
+            user_google_email="user@example.com",
+            script_id="abc123",
+            function_name="main",
+            deployment_id="deploy123",
+        )
+
+    assert APPS_SCRIPT_USER_SETTINGS_URL in str(excinfo.value)

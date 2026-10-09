@@ -1105,16 +1105,7 @@ APPS_SCRIPT_USER_SETTINGS_URL = "https://script.google.com/home/usersettings"
 
 
 def _is_apps_script_api_disabled_for_user(error: HttpError, error_details: str) -> bool:
-    """Whether ``error`` is Google refusing Apps Script calls for this user.
-
-    The Apps Script API also has a per-user switch, separate from enabling
-    ``script.googleapis.com`` in the Cloud project. While it is off, Google's
-    documented answer is a 403 "User has not enabled the Apps Script API", but
-    in practice it also answers 503 "Service error -27" with an HTML error
-    page, which reads like an outage. Either way the fix is the user's own
-    setting, so both are treated alike. Other 503s, such as a real outage,
-    are left to the generic handling so Google's own error stays visible.
-    """
+    """Google reports the per-user setting off as a 403 or a 503 "Service error -27"."""
     host = urllib.parse.urlparse(getattr(error, "uri", None) or "").hostname
     if host != "script.googleapis.com":
         return False
@@ -1196,8 +1187,6 @@ def handle_http_errors(
                                 f"Please check the Google Cloud Console to enable it."
                             )
                     elif _is_apps_script_api_disabled_for_user(error, error_details):
-                        # Before the generic 401/403 branch: re-authenticating
-                        # does not help, the user's own setting does.
                         message = (
                             f"API error in {tool_name}: the Apps Script API refused "
                             f"the request (HTTP {error.resp.status}) for user "
