@@ -1977,6 +1977,56 @@ async def test_send_gmail_message_requires_to_when_forwarding():
 
 
 @pytest.mark.asyncio
+async def test_draft_gmail_message_forward_creates_draft_instead_of_sending():
+    mock_service = _mock_gmail_service()
+    mock_service.users().messages().get().execute.return_value = {
+        "payload": {
+            "mimeType": "text/plain",
+            "headers": [
+                {"name": "Subject", "value": "Quarterly"},
+                {"name": "From", "value": "alice@example.com"},
+            ],
+            "body": {"data": base64.urlsafe_b64encode(b"Numbers inside.").decode()},
+        }
+    }
+    mock_service.users().drafts().create().execute.return_value = {"id": "draft123"}
+
+    result = await _unwrap(draft_gmail_message)(
+        service=mock_service,
+        user_google_email="user@example.com",
+        to="recipient@example.com",
+        body="FYI - see below.",
+        forward_message_id="abc123",
+    )
+
+    assert result == "Forward draft created! Draft ID: draft123"
+    mock_service.users().messages().send().execute.assert_not_called()
+    raw = (
+        mock_service.users().drafts().create.call_args.kwargs["body"]["message"]["raw"]
+    )
+    drafted = BytesParser(policy=policy.default).parsebytes(
+        base64.urlsafe_b64decode(raw)
+    )
+    assert drafted["Subject"] == "Fwd: Quarterly"
+    assert drafted["To"] == "recipient@example.com"
+    assert "FYI - see below." in drafted.get_body().get_content()
+
+
+@pytest.mark.asyncio
+async def test_draft_gmail_message_requires_subject_and_body_unless_forwarding():
+    mock_service = _mock_gmail_service()
+
+    with pytest.raises(UserInputError, match="'subject' and 'body' are required"):
+        await _unwrap(draft_gmail_message)(
+            service=mock_service,
+            user_google_email="user@example.com",
+            body="Hi there!",
+        )
+
+    mock_service.users.return_value.drafts.return_value.create.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_gmail_message_does_not_fetch_thread_for_a_new_message():
     mock_service = _mock_gmail_service()
     mock_service.users().messages().send().execute.return_value = {"id": "sent123"}
