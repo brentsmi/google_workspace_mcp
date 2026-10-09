@@ -2811,6 +2811,7 @@ async def send_gmail_message(
             forward_message=body,
             forward_message_format=body_format,
             include_attachments=include_forwarded_attachments,
+            attachments=attachments,
             cc=cc,
             bcc=bcc,
             from_name=from_name,
@@ -2967,6 +2968,7 @@ async def _forward_gmail_message_impl(
     from_email: Optional[str] = None,
     user_google_email: str = "",
     as_draft: bool = False,
+    attachments: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Build a forward of an existing Gmail message and send it or save it as a draft.
 
@@ -3060,6 +3062,8 @@ async def _forward_gmail_message_impl(
                 "Failed to include requested attachment(s): "
                 + ", ".join(failed_attachments)
             )
+
+    attachments_to_send.extend(await _resolve_url_attachments(attachments) or [])
 
     # Prepare and send the message
     sender_email = from_email or user_google_email
@@ -3335,6 +3339,11 @@ async def draft_gmail_message(
         )
     """
     if forward_message_id:
+        sender_email = from_email
+        if not sender_email:
+            sender_email, _ = await _get_send_as_identity_and_signature(
+                service, from_email=None, fallback_email=user_google_email
+            )
         logger.info(
             f"[draft_gmail_message] Drafting forward of message '{forward_message_id}' for '{user_google_email}'"
         )
@@ -3346,10 +3355,11 @@ async def draft_gmail_message(
             forward_message=body,
             forward_message_format=body_format,
             include_attachments=include_forwarded_attachments,
+            attachments=attachments,
             cc=cc,
             bcc=bcc,
             from_name=from_name,
-            from_email=from_email,
+            from_email=sender_email,
             user_google_email=user_google_email,
             as_draft=True,
         )
